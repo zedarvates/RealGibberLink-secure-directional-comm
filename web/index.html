@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:;">
+    <title>RealGibber WebAssembly Demo</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🔐 RealGibber WebAssembly Demo</h1>
+
+        <div id="loading" class="loading">
+            Loading RealGibber WebAssembly module...
+        </div>
+
+        <div id="main-content" style="display: none;">
+            <!-- Cryptography Section -->
+            <div class="section">
+                <h2>🔐 Cryptographic Operations
+                    <button id="toggle-keys" class="toggle-btn" title="Toggle key visibility">👁</button>
+                </h2>
+                <div class="crypto-section">
+                    <div>
+                        <h3>Random Generation</h3>
+                        <button id="generate-nonce">Generate Nonce</button>
+                        <button id="generate-random">Generate Random Bytes</button>
+                        <div id="random-output"></div>
+                    </div>
+
+                    <div>
+                        <h3>HMAC Operations</h3>
+                        <input type="password" id="hmac-key" placeholder="HMAC Key (hex)" class="key-field">
+                        <input type="text" id="hmac-data" placeholder="Data (hex)">
+                        <button id="compute-hmac">Compute HMAC</button>
+                        <button id="verify-hmac">Verify HMAC</button>
+                        <input type="text" id="hmac-expected" placeholder="Expected HMAC (hex)">
+                        <div id="hmac-output"></div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <h3>AES-GCM Encryption</h3>
+                    <input type="password" id="aes-key" placeholder="AES Key (32 bytes hex)" class="key-field">
+                    <input type="text" id="aes-plaintext" placeholder="Plaintext to encrypt">
+                    <button id="encrypt-data">Encrypt</button>
+                    <button id="decrypt-data">Decrypt</button>
+                    <input type="text" id="aes-ciphertext" placeholder="Ciphertext (hex) to decrypt">
+                    <div id="aes-output"></div>
+                </div>
+            </div>
+
+            <!-- QR Code Section -->
+            <div class="section">
+                <h2>📱 QR Code Utilities</h2>
+                <input type="password" id="session-id-input" placeholder="Session ID (hex)" class="key-field">
+                <input type="password" id="public-key-input" placeholder="Public Key (hex)" class="key-field">
+                <input type="text" id="nonce-input" placeholder="Nonce (hex)">
+                <button id="generate-qr">Generate QR Code</button>
+                <button id="decode-qr">Decode QR Code</button>
+                <input type="text" id="qr-decode-input" placeholder="QR data to decode">
+                <div id="qr-output"></div>
+            </div>
+
+            <!-- Protocol Engine Section -->
+            <div class="section">
+                <h2>🔗 Protocol Engine</h2>
+                <div class="crypto-section">
+                    <div>
+                        <h3>Connection Setup</h3>
+                        <select id="communication-mode">
+                            <option value="short-range">Short Range</option>
+                            <option value="long-range">Long Range</option>
+                            <option value="auto">Auto</option>
+                        </select>
+                        <button id="set-mode">Set Mode</button>
+                        <button id="initiate-handshake">Initiate Handshake</button>
+                        <button id="get-state">Get State</button>
+                        <div id="protocol-status"></div>
+                    </div>
+
+                    <div>
+                        <h3>Communication</h3>
+                        <input type="text" id="nonce-receive-input" placeholder="Received Nonce (hex)">
+                        <button id="receive-nonce">Receive Nonce</button>
+                        <input type="text" id="qr-process-input" placeholder="QR Data">
+                        <button id="process-qr">Process QR</button>
+                        <button id="receive-ack">Receive ACK</button>
+                        <div id="qr-display" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <h3>Messaging</h3>
+                    <input type="text" id="message-input" placeholder="Message to send">
+                    <button id="send-message">Send Message</button>
+                    <button id="check-messages">Check Messages</button>
+                    <div id="messages" class="messages"></div>
+                </div>
+
+                <div style="margin-top: 20px;">
+                    <h3>Performance</h3>
+                    <p class="notice">Performance monitoring is only available in the native build.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import init, {
+            WasmCryptoEngine,
+            WasmVisualEngine,
+            WasmProtocolEngine,
+            greet,
+            get_version,
+            get_build_info
+        } from './rgibberlink_core_wasm.js';
+
+        let cryptoEngine = null;
+        let visualEngine = null;
+        let protocolEngine = null;
+
+        async function initialize() {
+            try {
+                // Initialize WebAssembly module
+                await init();
+
+                // Create instances
+                cryptoEngine = new WasmCryptoEngine();
+                visualEngine = new WasmVisualEngine();
+                protocolEngine = new WasmProtocolEngine();
+
+                // Update UI
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('main-content').style.display = 'block';
+
+                console.log(get_build_info());
+                console.log(greet("WebAssembly User"));
+
+                // Setup event listeners and show initial state
+                setupEventListeners();
+                updateStatus();
+
+            } catch (error) {
+                console.error('Failed to initialize WebAssembly:', error);
+                document.getElementById('loading').innerHTML =
+                    '<div class="error">Failed to load RealGibber WebAssembly module. Please check console for details.</div>';
+            }
+        }
+
+        function setupEventListeners() {
+            // Protocol buttons
+            document.getElementById('set-mode').addEventListener('click', setCommunicationMode);
+            document.getElementById('initiate-handshake').addEventListener('click', initiateHandshake);
+            document.getElementById('receive-nonce').addEventListener('click', receiveNonce);
+            document.getElementById('process-qr').addEventListener('click', processQrCode);
+            document.getElementById('receive-ack').addEventListener('click', receiveAck);
+            document.getElementById('get-state').addEventListener('click', getProtocolState);
+
+            // Messaging buttons
+            document.getElementById('send-message').addEventListener('click', sendMessage);
+            document.getElementById('check-messages').addEventListener('click', checkMessages);
+
+            // Crypto buttons
+            document.getElementById('generate-nonce').addEventListener('click', generateNonce);
+            document.getElementById('generate-random').addEventListener('click', generateRandom);
+            document.getElementById('compute-hmac').addEventListener('click', computeHmac);
+            document.getElementById('verify-hmac').addEventListener('click', verifyHmac);
+
+            // AES encrypt/decrypt buttons
+            document.getElementById('encrypt-data').addEventListener('click', encryptData);
+            document.getElementById('decrypt-data').addEventListener('click', decryptData);
+
+            // QR buttons
+            document.getElementById('generate-qr').addEventListener('click', generateQr);
+            document.getElementById('decode-qr').addEventListener('click', decodeQr);
+
+            // Key visibility toggle
+            document.getElementById('toggle-keys').addEventListener('click', toggleKeys);
+        }
+
+        function updateStatus() {
+            if (!protocolEngine) return;
+
+            try {
+                const state = protocolEngine.get_state();
+                const statusElement = document.getElementById('protocol-status');
+
+                statusElement.className = 'status ' + state.toLowerCase().replace('_', '-');
+                statusElement.textContent = `Status: ${state.replace('_', ' ').toUpperCase()}`;
+
+                // Enable/disable buttons based on state
+                const initiateBtn = document.getElementById('initiate-handshake');
+                const processBtn = document.getElementById('process-qr');
+                const ackBtn = document.getElementById('receive-ack');
+                const sendBtn = document.getElementById('send-message');
+
+                const connectedStates = ['connected'];
+                initiateBtn.disabled = state !== 'idle';
+                processBtn.disabled = state !== 'waiting_for_qr';
+                ackBtn.disabled = state !== 'waiting_for_qr';
+                sendBtn.disabled = !connectedStates.includes(state);
+
+            } catch (error) {
+                console.error('Status update failed:', error);
+            }
+        }
+
+        function addMessage(content, type) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = content;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        async function generateNonce() {
+            try {
+                const nonce = cryptoEngine.generate_nonce();
+                document.getElementById('random-output').innerHTML = `<strong>Nonce:</strong> ${nonce}`;
+            } catch (error) {
+                showError('Nonce generation failed: ' + error);
+            }
+        }
+
+        async function generateRandom() {
+            try {
+                const random = cryptoEngine.generate_random_bytes(32);
+                document.getElementById('random-output').innerHTML = `<strong>Random Bytes:</strong> ${random}`;
+            } catch (error) {
+                showError('Random generation failed: ' + error);
+            }
+        }
+
+        async function computeHmac() {
+            const key = document.getElementById('hmac-key').value.trim();
+            const data = document.getElementById('hmac-data').value.trim();
+
+            if (!key || !data) {
+                showError('Please enter both key and data');
+                return;
+            }
+
+            if (!isValidHex(key) || !isValidHex(data)) {
+                showError('Key and data must be hex strings');
+                return;
+            }
+
+            try {
+                const hmac = cryptoEngine.compute_hmac(key, data);
+                document.getElementById('hmac-output').innerHTML = `<strong>HMAC:</strong> ${hmac}`;
+            } catch (error) {
+                showError('HMAC computation failed: ' + error);
+            }
+        }
+
+        async function verifyHmac() {
+            const key = document.getElementById('hmac-key').value.trim();
+            const data = document.getElementById('hmac-data').value.trim();
+            const expected = document.getElementById('hmac-expected').value.trim();
+
+            if (!key || !data || !expected) {
+                showError('Please enter key, data, and expected HMAC');
+                return;
+            }
+
+            if (!isValidHex(key) || !isValidHex(data) || !isValidHex(expected)) {
+                showError('Key, data, and expected HMAC must be hex strings');
+                return;
+            }
+
+            try {
+                const valid = cryptoEngine.verify_hmac(key, data, expected);
+                document.getElementById('hmac-output').innerHTML =
+                    `<strong>HMAC Verification:</strong> ${valid ? '✅ Valid' : '❌ Invalid'}`;
+            } catch (error) {
+                showError('HMAC verification failed: ' + error);
+            }
+        }
+
+        function isValidHex(str) {
+            return /^[0-9a-fA-F]+$/.test(str);
+        }
+
+        async function encryptData() {
+            const key = document.getElementById('aes-key').value.trim();
+            const data = document.getElementById('aes-plaintext').value;
+
+            if (!key || !data) {
+                showError('Please enter both AES key and plaintext');
+                return;
+            }
+
+            if (!isValidHex(key)) {
+                showError('AES key must be a hex string');
+                return;
+            }
+
+            try {
+                const encrypted = cryptoEngine.encrypt_data(key, data);
+                document.getElementById('aes-ciphertext').value = encrypted;
+                document.getElementById('aes-output').innerHTML = `<strong>Encrypted:</strong> ${encrypted.substring(0, 40)}...`;
+            } catch (error) {
+                document.getElementById('aes-ciphertext').value = '';
+                document.getElementById('aes-output').innerHTML = '';
+                showError('Encryption failed: ' + error);
+            }
+        }
+
+        async function decryptData() {
+            const key = document.getElementById('aes-key').value.trim();
+            const encrypted = document.getElementById('aes-ciphertext').value.trim();
+
+            if (!key || !encrypted) {
+                showError('Please enter both AES key and ciphertext');
+                return;
+            }
+
+            if (!isValidHex(key)) {
+                showError('AES key must be a hex string');
+                return;
+            }
+
+            if (!isValidHex(encrypted)) {
+                showError('Ciphertext must be a hex string');
+                return;
+            }
+
+            try {
+                const decrypted = cryptoEngine.decrypt_data(key, encrypted);
+                document.getElementById('aes-output').innerHTML = `<strong>Decrypted:</strong> ${decrypted}`;
+            } catch (error) {
+                showError('Decryption failed: ' + error);
+            }
+        }
+
+        async function generateQr() {
+            const sessionId = document.getElementById('session-id-input').value;
+            const publicKey = document.getElementById('public-key-input').value;
+            const nonce = document.getElementById('nonce-input').value;
+
+            if (!sessionId || !publicKey || !nonce) {
+                showError('Please enter session ID, public key, and nonce');
+                return;
+            }
+
+            try {
+                const qrData = visualEngine.encode_payload(sessionId, publicKey, nonce);
+                document.getElementById('qr-output').innerHTML = `<strong>QR Data:</strong><br>${qrData}`;
+            } catch (error) {
+                showError('QR generation failed: ' + error);
+            }
+        }
+
+        async function decodeQr() {
+            const qrData = document.getElementById('qr-decode-input').value;
+            if (!qrData) {
+                showError('Please enter QR data to decode');
+                return;
+            }
+
+            try {
+                const decoded = visualEngine.decode_payload(qrData);
+                document.getElementById('qr-output').innerHTML = `<strong>Decoded:</strong><br><pre>${decoded}</pre>`;
+            } catch (error) {
+                showError('QR decoding failed: ' + error);
+            }
+        }
+
+        // Protocol Engine Functions
+        function setCommunicationMode() {
+            const mode = document.getElementById('communication-mode').value;
+            try {
+                protocolEngine.set_mode(mode);
+                document.getElementById('protocol-status').textContent = `Mode set to: ${mode}`;
+                updateStatus();
+            } catch (error) {
+                showError('Failed to set communication mode: ' + error);
+            }
+        }
+
+        function initiateHandshake() {
+            try {
+                protocolEngine.initiate_handshake();
+                document.getElementById('protocol-status').textContent = 'Handshake initiated';
+                updateStatus();
+            } catch (error) {
+                showError('Handshake initiation failed: ' + error);
+            }
+        }
+
+        function receiveNonce() {
+            const nonceHex = document.getElementById('nonce-receive-input').value;
+            if (!nonceHex) {
+                showError('Please enter nonce');
+                return;
+            }
+
+            try {
+                const qrData = protocolEngine.receive_nonce(nonceHex);
+                document.getElementById('qr-display').innerHTML = `<strong>Generated QR Code:</strong><br><pre>${qrData}</pre>`;
+                document.getElementById('qr-display').style.display = 'block';
+                updateStatus();
+            } catch (error) {
+                showError('Nonce reception failed: ' + error);
+            }
+        }
+
+        function processQrCode() {
+            const qrData = document.getElementById('qr-process-input').value;
+            if (!qrData) {
+                showError('Please enter QR data');
+                return;
+            }
+
+            try {
+                protocolEngine.process_qr_payload(qrData);
+                document.getElementById('protocol-status').textContent = 'QR processed successfully';
+                updateStatus();
+            } catch (error) {
+                showError('QR processing failed: ' + error);
+            }
+        }
+
+        function receiveAck() {
+            try {
+                protocolEngine.receive_ack();
+                document.getElementById('protocol-status').textContent = 'ACK received';
+                updateStatus();
+            } catch (error) {
+                showError('ACK reception failed: ' + error);
+            }
+        }
+
+        function getProtocolState() {
+            try {
+                const state = protocolEngine.get_state();
+                document.getElementById('protocol-status').className = 'status ' + state.toLowerCase().replace('_', '-');
+                document.getElementById('protocol-status').innerHTML = `<strong>Current State:</strong><br><pre>${state}</pre>`;
+            } catch (error) {
+                showError('Failed to get protocol state: ' + error);
+            }
+        }
+
+        function sendMessage() {
+            const message = document.getElementById('message-input').value;
+            if (!message) {
+                showError('Please enter a message');
+                return;
+            }
+
+            try {
+                const encrypted = protocolEngine.send_text_message(message);
+                addMessage(`Sent: ${message} | enc: ${encrypted.substring(0, 32)}...`, 'outgoing');
+                document.getElementById('message-input').value = '';
+            } catch (error) {
+                showError('Message send failed: ' + error);
+            }
+        }
+
+        function checkMessages() {
+            try {
+                const messagesJson = protocolEngine.get_pending_messages();
+                const messages = JSON.parse(messagesJson);
+
+                if (messages.length === 0) {
+                    addMessage('No pending messages (demo limitation)', 'incoming');
+                } else {
+                    messages.forEach(msg => {
+                        addMessage(`Received: ${msg}`, 'incoming');
+                    });
+                }
+            } catch (error) {
+                console.error('Message check failed:', error);
+            }
+        }
+
+        let keysVisible = false;
+
+        function toggleKeys() {
+            keysVisible = !keysVisible;
+            document.querySelectorAll('.key-field').forEach(el => {
+                el.type = keysVisible ? 'text' : 'password';
+            });
+            document.getElementById('toggle-keys').textContent = keysVisible ? '👁‍🗨' : '👁';
+        }
+
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.textContent = message;
+
+            const loadingEl = document.getElementById('loading');
+            loadingEl.parentNode.insertBefore(errorDiv, loadingEl.nextSibling);
+
+            setTimeout(() => errorDiv.remove(), 5000);
+        }
+
+        // Initialize when page loads
+        window.addEventListener('load', initialize);
+    </script>
+</body>
+</html>

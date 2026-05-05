@@ -1,0 +1,28 @@
+{
+  "name": "rgibberlink-core-wasm",
+  "type": "module",
+  "description": "WebAssembly-compatible version of RealGibber core",
+  "version": "0.3.0",
+  "license": "GPL-3.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build:wasm": "wasm-pack build --target web --out-dir ../web ../rgibberlink-core -- --config ../Cargo-wasm.toml"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "rgibberlink_core_wasm.js",
+  "types": "rgibberlink_core_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "devDependencies": {
+    "vite": "^6.3.5",
+    "vitest": "^3.1.5",
+    "jsdom": "^26.1.0"
+  }
+}
