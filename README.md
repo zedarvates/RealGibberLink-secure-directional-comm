@@ -113,3 +113,8 @@ For security-related issues, please email security@realgibber.com (do not use pu
 **Built with ❤️ for the future of secure autonomous systems**
 
 *RealGibberLink - Where directional security meets autonomous coordination*
+
+
+---
+
+[![Donate](https://img.shields.io/badge/☕%20Soutenir-BTC%20%7C%20ETH-orange)](DONATE.md)
