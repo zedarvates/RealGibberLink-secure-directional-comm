@@ -1,0 +1,13 @@
+# Build artifacts
+target/
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# OS noise
+.DS_Store
+Thumbs.db
