@@ -59,9 +59,9 @@ RGibberLink implements secure, short-range pairing protocols and long-range dire
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/zedarvates/RealGibberLink-Secure-air-gapped-short-range-comm-for-robots-drones.git
+git clone https://github.com/zedarvates/RealGibberLink-secure-directional-comm.git
 
-cd RealGibberLink-Secure-air-gapped-short-range-comm-for-robots-drones
+cd RealGibberLink-secure-directional-comm
 
 # Build the core library
 cd rgibberlink-core
