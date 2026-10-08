@@ -95,7 +95,7 @@ impl PyVisualEngine {
     }
 
     fn encode_qr_code(&self, py: Python, data: Vec<u8>) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let code = qrcode::QrCode::new(&data)
                 .map_err(|_| PyRuntimeError::new_err("QR code generation failed"))?;
             Ok(code.render::<qrcode::render::svg::Color>().build())
@@ -167,21 +167,21 @@ impl PyAudioEngine {
     }
 
     fn send_data(&self, py: Python, data: Vec<u8>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return Ok since audio engine is not fully implemented
             Ok(())
         })
     }
 
     fn receive_data(&self, py: Python) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return empty data since audio engine is not fully implemented
             Ok(vec![])
         })
     }
 
     fn is_receiving(&self, py: Python) -> bool {
-        py.allow_threads(|| false)
+        py.detach(|| false)
     }
 }
 
@@ -201,48 +201,48 @@ impl PyProtocolEngine {
     }
 
     fn initiate_handshake(&self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate handshake initiation
             Ok(())
         })
     }
 
     fn receive_nonce(&self, py: Python, nonce: Vec<u8>) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return a mock QR code
             Ok("<svg>Mock QR Code</svg>".to_string())
         })
     }
 
     fn process_qr_payload(&self, py: Python, qr_data: Vec<u8>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate QR processing
             Ok(())
         })
     }
 
     fn receive_ack(&self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate ACK reception
             Ok(())
         })
     }
 
     fn get_state(&self, py: Python) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             Ok("idle".to_string())
         })
     }
 
     fn encrypt_message(&self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return data unchanged (no encryption)
             Ok(data)
         })
     }
 
     fn decrypt_message(&self, py: Python, encrypted_data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return data unchanged (no decryption)
             Ok(encrypted_data)
         })
@@ -265,48 +265,48 @@ impl PyRgibberLink {
     }
 
     fn initiate_handshake(&self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate handshake initiation
             Ok(())
         })
     }
 
     fn receive_nonce(&self, py: Python, nonce: Vec<u8>) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return a mock QR code
             Ok("<svg>Mock QR Code</svg>".to_string())
         })
     }
 
     fn process_qr_payload(&self, py: Python, qr_data: Vec<u8>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate QR processing
             Ok(())
         })
     }
 
     fn receive_ack(&self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate ACK reception
             Ok(())
         })
     }
 
     fn get_state(&self, py: Python) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             Ok("idle".to_string())
         })
     }
 
     fn encrypt_message(&self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return data unchanged (no encryption)
             Ok(data)
         })
     }
 
     fn decrypt_message(&self, py: Python, encrypted_data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return data unchanged (no decryption)
             Ok(encrypted_data)
         })
@@ -334,7 +334,7 @@ impl PyWeatherManager {
     }
 
     fn assess_weather_impact(&self, py: Python, mission: &PyMissionPayload, drone_specs: &PyDroneSpecifications) -> PyResult<PyWeatherImpact> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let impact = self.inner.assess_weather_impact(&mission.inner, &drone_specs.inner)
                 .map_err(|e| PyRuntimeError::new_err(format!("Weather assessment error: {}", e)))?;
             Ok(PyWeatherImpact { inner: impact })
@@ -342,7 +342,7 @@ impl PyWeatherManager {
     }
 
     fn validate_mission_constraints(&self, py: Python, mission: &PyMissionPayload, drone_specs: &PyDroneSpecifications) -> PyResult<PyValidationResult> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let result = self.inner.validate_mission_constraints(&mission.inner, &drone_specs.inner)
                 .map_err(|e| PyRuntimeError::new_err(format!("Validation error: {}", e)))?;
             Ok(PyValidationResult { inner: result })
@@ -655,7 +655,7 @@ impl PyAuditSystem {
     }
 
     fn record_event(&mut self, py: Python, event: PyAuditEntry) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.record_event(event.inner)
                 .map_err(|e| PyRuntimeError::new_err(format!("Audit error: {}", e)))
         })
@@ -758,14 +758,14 @@ impl PyRangeDetector {
     }
 
     fn initialize(&mut self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.initialize()
                 .map_err(|e| PyRuntimeError::new_err(format!("Range detector initialization error: {}", e)))
         })
     }
 
     fn measure_distance(&self, py: Python) -> PyResult<PyRangeMeasurement> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let measurement = self.inner.measure_distance()
                 .map_err(|e| PyRuntimeError::new_err(format!("Range measurement error: {}", e)))?;
             Ok(PyRangeMeasurement { inner: measurement })
@@ -773,7 +773,7 @@ impl PyRangeDetector {
     }
 
     fn measure_distance_averaged(&self, py: Python, samples: usize) -> PyResult<PyRangeMeasurement> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let measurement = self.inner.measure_distance_averaged(samples)
                 .map_err(|e| PyRuntimeError::new_err(format!("Averaged range measurement error: {}", e)))?;
             Ok(PyRangeMeasurement { inner: measurement })
@@ -781,14 +781,14 @@ impl PyRangeDetector {
     }
 
     fn update_environmental_conditions(&self, py: Python, conditions: PyRangeEnvironmentalConditions) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.update_environmental_conditions(conditions.inner)
                 .map_err(|e| PyRuntimeError::new_err(format!("Environmental update error: {}", e)))
         })
     }
 
     fn get_current_range_category(&self, py: Python) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let category = self.inner.get_current_range_category()
                 .map(|cat| format!("{:?}", cat))
                 .unwrap_or("Unknown".to_string());
@@ -886,21 +886,21 @@ impl PyLaserEngine {
     }
 
     fn initialize(&mut self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.initialize()
                 .map_err(|e| PyRuntimeError::new_err(format!("Laser initialization error: {}", e)))
         })
     }
 
     fn transmit_data(&mut self, py: Python, data: Vec<u8>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.transmit_data(&data)
                 .map_err(|e| PyRuntimeError::new_err(format!("Laser transmission error: {}", e)))
         })
     }
 
     fn enable_adaptive_mode(&mut self, py: Python, range_detector: PyRangeDetector) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let detector = std::sync::Arc::new(tokio::sync::Mutex::new(range_detector.inner));
             self.inner.enable_adaptive_mode(detector);
             Ok(())
@@ -908,7 +908,7 @@ impl PyLaserEngine {
     }
 
     fn get_alignment_status(&self, py: Python) -> PyResult<PyAlignmentStatus> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let status = self.inner.get_alignment_status();
             Ok(PyAlignmentStatus { inner: status })
         })
@@ -956,21 +956,21 @@ impl PyUltrasonicBeamEngine {
     }
 
     fn initialize(&mut self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.initialize()
                 .map_err(|e| PyRuntimeError::new_err(format!("Ultrasonic beam initialization error: {}", e)))
         })
     }
 
     fn transmit_sync_pulse(&self, py: Python, pattern: Vec<u8>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.transmit_sync_pulse(&pattern)
                 .map_err(|e| PyRuntimeError::new_err(format!("Sync pulse transmission error: {}", e)))
         })
     }
 
     fn detect_presence(&self, py: Python) -> PyResult<bool> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.detect_presence()
                 .map_err(|e| PyRuntimeError::new_err(format!("Presence detection error: {}", e)))
         })
@@ -993,14 +993,14 @@ impl PyOpticalECC {
     }
 
     fn encode(&mut self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.encode(&data)
                 .map_err(|e| PyRuntimeError::new_err(format!("Optical ECC encoding error: {}", e)))
         })
     }
 
     fn decode(&mut self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.decode(&data)
                 .map_err(|e| PyRuntimeError::new_err(format!("Optical ECC decoding error: {}", e)))
         })
@@ -1023,7 +1023,7 @@ impl PyChannelValidator {
     }
 
     fn receive_channel_data(&self, py: Python, data: PyChannelData) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.receive_channel_data(data.inner)
                 .map_err(|e| PyRuntimeError::new_err(format!("Channel validation error: {}", e)))
         })
@@ -1088,14 +1088,14 @@ impl PySecurityManager {
     }
 
     fn validate_pin(&self, py: Python, pin: String) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             self.inner.validate_pin(&pin)
                 .map_err(|e| PyRuntimeError::new_err(format!("PIN validation error: {}", e)))
         })
     }
 
     fn check_permission(&self, py: Python, permission: String, scope: String) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let perm_type = match permission.as_str() {
                 "Read" => crate::security::PermissionType::Read,
                 "Write" => crate::security::PermissionType::Write,
@@ -1132,7 +1132,7 @@ impl PyPerformanceMonitor {
     }
 
     fn run_benchmark_suite(&self, py: Python, duration_secs: u64) -> PyResult<Vec<PyBenchmarkResult>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let results = self.inner.run_benchmark_suite(duration_secs)
                 .map_err(|e| PyRuntimeError::new_err(format!("Benchmark error: {}", e)))?;
             Ok(results.into_iter().map(|r| PyBenchmarkResult { inner: r }).collect())
@@ -1140,7 +1140,7 @@ impl PyPerformanceMonitor {
     }
 
     fn get_current_metrics(&self, py: Python) -> PyResult<Option<PyPerformanceMetrics>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let metrics = self.inner.get_current_metrics();
             Ok(metrics.map(|m| PyPerformanceMetrics { inner: m }))
         })
@@ -1223,7 +1223,7 @@ impl PyPostQuantumEngine {
     }
 
     fn encapsulate_secret(&self, py: Python, peer_public_key: Vec<u8>) -> PyResult<PyKyberCiphertextData> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let pk_bytes: [u8; 1184] = peer_public_key.try_into()
                 .map_err(|_| PyRuntimeError::new_err("Invalid Kyber public key length"))?;
             let pk = crate::post_quantum::KyberPublicKey::from_bytes(&pk_bytes)
@@ -1237,7 +1237,7 @@ impl PyPostQuantumEngine {
     }
 
     fn decapsulate_secret(&self, py: Python, ciphertext: PyKyberCiphertextData) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let shared_secret = self.inner.decapsulate_secret(&ciphertext.inner.ciphertext)
                 .map_err(|e| PyRuntimeError::new_err(format!("Decapsulation error: {}", e)))?;
             Ok(shared_secret.as_bytes().to_vec())
@@ -1245,7 +1245,7 @@ impl PyPostQuantumEngine {
     }
 
     fn sign_data(&self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let signature = self.inner.sign_data(&data)
                 .map_err(|e| PyRuntimeError::new_err(format!("Signing error: {}", e)))?;
             Ok(signature.as_bytes().to_vec())
@@ -1253,7 +1253,7 @@ impl PyPostQuantumEngine {
     }
 
     fn verify_signature(&self, py: Python, data: Vec<u8>, signature: Vec<u8>, public_key: Vec<u8>) -> PyResult<bool> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let sig_bytes: [u8; 2420] = signature.try_into()
                 .map_err(|_| PyRuntimeError::new_err("Invalid Dilithium signature length"))?;
             let sig = crate::post_quantum::DilithiumSignature::from_bytes(&sig_bytes)
@@ -1295,7 +1295,7 @@ impl PyKyberCiphertextData {
 /// Main Python module
 #[pymodule]
 #[pyo3(name = "_core")]
-fn gibberlink_core(_py: Python, m: &PyModule) -> PyResult<()> {
+fn gibberlink_core(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Core cryptographic and protocol components
     m.add_class::<PyCryptoEngine>()?;
     m.add_class::<PyVisualEngine>()?;
