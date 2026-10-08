@@ -39,12 +39,15 @@ reed-solomon-erasure = "6.0"
 reqwest = { version = "0.11", features = ["json"], optional = true }
 
 # Python bindings
-pyo3 = { version = "0.24", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.29.3", features = ["extension-module"], optional = true }
 hkdf = "0.12.4"
 clap = { version = "4.0", features = ["derive"], optional = true }
 
 # Post-quantum cryptography
-pqcrypto = { version = "0.15", optional = true }
+# Depend directly on the two algorithms used; the old umbrella pulls unused HQC.
+pqcrypto-kyber = { version = "0.7.9", optional = true }
+pqcrypto-dilithium = { version = "0.4.6", optional = true }
+pqcrypto-traits = { version = "0.3.5", optional = true }
 
 # WebAssembly support
 wasm-bindgen = { version = "0.2", optional = true }
@@ -59,7 +62,7 @@ async = ["tokio", "criterion"]
 # long-range = ["signal-processing", "beamforming", "optical-ecc", "hal"]  # Enable when dependencies are available
 python = ["pyo3", "clap"]
 weather-api = ["reqwest"]
-post-quantum = ["pqcrypto"]
+post-quantum = ["dep:pqcrypto-kyber", "dep:pqcrypto-dilithium", "dep:pqcrypto-traits"]
 wasm = ["wasm-bindgen", "wasm-bindgen-futures", "web-sys", "js-sys"]
 wasm-only = ["wasm", "short-range"]  # WASM-only build without async dependencies
 # android = ["long-range"]  # Enable when long-range is available

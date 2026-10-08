@@ -243,7 +243,7 @@ impl ComplianceEngine {
                     CompliancePriority::Critical => {
                         if !matches!(severity, AuditSeverity::Critical) {
                             flags.push(ComplianceFlag::Violation {
-                                severity: ViolationSeverity::High,
+                                severity: ViolationSeverity::Critical,
                                 code: "CRITICAL_SEVERITY_REQUIRED".to_string(),
                                 message: "Critical operations require critical severity".to_string(),
                             });
@@ -296,7 +296,7 @@ mod tests {
     #[tokio::test]
     async fn test_compliance_engine_creation() {
         let compliance_engine = ComplianceEngine::new();
-        assert!(!compliance_engine.regulatory_frameworks.is_empty()); // Should have default rules
+        assert!(!compliance_engine.get_compliance_rules().is_empty()); // Default rules, frameworks are configured separately
     }
 
     #[tokio::test]

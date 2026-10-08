@@ -84,7 +84,7 @@ impl PyVisualEngine {
     }
 
     fn encode_qr_code(&self, py: Python, data: Vec<u8>) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             let code = qrcode::QrCode::new(&data)
                 .map_err(|_| PyRuntimeError::new_err("QR code generation failed"))?;
             Ok(code.render::<qrcode::render::svg::Color>().build())
@@ -156,21 +156,21 @@ impl PyAudioEngine {
     }
 
     fn send_data(&self, py: Python, data: Vec<u8>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return Ok since audio engine is not fully implemented
             Ok(())
         })
     }
 
     fn receive_data(&self, py: Python) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return empty data since audio engine is not fully implemented
             Ok(vec![])
         })
     }
 
     fn is_receiving(&self, py: Python) -> bool {
-        py.allow_threads(|| false)
+        py.detach(|| false)
     }
 }
 
@@ -190,48 +190,48 @@ impl PyProtocolEngine {
     }
 
     fn initiate_handshake(&self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate handshake initiation
             Ok(())
         })
     }
 
     fn receive_nonce(&self, py: Python, nonce: Vec<u8>) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return a mock QR code
             Ok("<svg>Mock QR Code</svg>".to_string())
         })
     }
 
     fn process_qr_payload(&self, py: Python, qr_data: Vec<u8>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate QR processing
             Ok(())
         })
     }
 
     fn receive_ack(&self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate ACK reception
             Ok(())
         })
     }
 
     fn get_state(&self, py: Python) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             Ok("idle".to_string())
         })
     }
 
     fn encrypt_message(&self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return data unchanged (no encryption)
             Ok(data)
         })
     }
 
     fn decrypt_message(&self, py: Python, encrypted_data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return data unchanged (no decryption)
             Ok(encrypted_data)
         })
@@ -254,48 +254,48 @@ impl PyRgibberLink {
     }
 
     fn initiate_handshake(&self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate handshake initiation
             Ok(())
         })
     }
 
     fn receive_nonce(&self, py: Python, nonce: Vec<u8>) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return a mock QR code
             Ok("<svg>Mock QR Code</svg>".to_string())
         })
     }
 
     fn process_qr_payload(&self, py: Python, qr_data: Vec<u8>) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate QR processing
             Ok(())
         })
     }
 
     fn receive_ack(&self, py: Python) -> PyResult<()> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, simulate ACK reception
             Ok(())
         })
     }
 
     fn get_state(&self, py: Python) -> PyResult<String> {
-        py.allow_threads(|| {
+        py.detach(|| {
             Ok("idle".to_string())
         })
     }
 
     fn encrypt_message(&self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return data unchanged (no encryption)
             Ok(data)
         })
     }
 
     fn decrypt_message(&self, py: Python, encrypted_data: Vec<u8>) -> PyResult<Vec<u8>> {
-        py.allow_threads(|| {
+        py.detach(|| {
             // For now, return data unchanged (no decryption)
             Ok(encrypted_data)
         })
