@@ -70,6 +70,8 @@ impl Default for SecurityConfig {
                 key_exchange_algorithm: "X25519".to_string(),
                 hash_algorithm: "SHA-256".to_string(),
                 hkdf_algorithm: "HKDF-SHA256".to_string(),
+                #[cfg(feature = "post-quantum")]
+                hybrid_mode: false,
             },
             enable_cross_channel_signatures: true,
             enable_mfa: true,
@@ -495,12 +497,12 @@ impl SecurityManager {
 
     /// Check permission for operation
     pub async fn check_permission(&self, permission: PermissionType, scope: PermissionScope) -> Result<(), SecurityError> {
-        let state = self.state.lock().await;
-
         // Rate limiting check
         if self.is_rate_limited().await {
             return Err(SecurityError::RateLimitExceeded);
         }
+
+        let state = self.state.lock().await;
 
         match self.config.security_level {
             SecurityLevel::Minimum => {
@@ -1086,6 +1088,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_permission_checks_complete_and_preserve_locked_policy() {
+        let mut config = SecurityConfig::default();
+        config.security_level = SecurityLevel::Locked;
+        let manager = SecurityManager::new(config);
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1),
+            manager.check_permission(PermissionType::Command, PermissionScope::Single)).await;
+        assert!(matches!(result, Ok(Err(SecurityError::PermissionDenied))));
+        manager.grant_permission(PermissionType::Command, PermissionScope::Single, "test_user").await.unwrap();
+        let result = tokio::time::timeout(std::time::Duration::from_secs(1),
+            manager.check_permission(PermissionType::Command, PermissionScope::Single)).await;
+        assert!(matches!(result, Ok(Ok(()))));
+    }
+
+    #[tokio::test]
     async fn test_permission_system() {
         let config = SecurityConfig::default();
         let manager = SecurityManager::new(config);
@@ -1104,10 +1120,10 @@ mod tests {
         let manager = SecurityManager::new(config);
 
         // Test peer registration with valid format
-        assert!(manager.register_peer("GL-AB12-CDEF", TrustLevel::Medium).await.is_ok());
+        assert!(manager.register_peer("GL-AB12-CDEF0", TrustLevel::Medium).await.is_ok());
 
         // Test risk assessment
-        let risk = manager.get_peer_risk("GL-AB12-CDEF").await.unwrap();
+        let risk = manager.get_peer_risk("GL-AB12-CDEF0").await.unwrap();
         assert!(risk >= 0.0 && risk <= 1.0);
     }
 

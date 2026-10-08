@@ -1,0 +1,36 @@
+name: Rust and native security validation
+on:
+  pull_request:
+    paths:
+      - 'rgibberlink-core/**'
+      - 'tests/test_native_security_migration.py'
+      - '.github/workflows/security-validation.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  rust-and-python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Check Python bindings and CLI
+        working-directory: rgibberlink-core
+        run: cargo +stable check --locked --features python,post-quantum
+      - name: Test Rust core and retained algorithms
+        working-directory: rgibberlink-core
+        run: |
+          cargo +stable test --locked --lib
+          cargo +stable test --locked --test security_algorithms --features post-quantum
+      - name: Build native Python module
+        working-directory: rgibberlink-core
+        run: cargo +stable build --locked --lib --features python,post-quantum
+      - name: Test native security behavior
+        env:
+          REALGIBBER_CORE_LIBRARY: ${{ github.workspace }}/rgibberlink-core/target/debug/libgibberlink_core.so
+        run: timeout 30s python tests/test_native_security_migration.py -v

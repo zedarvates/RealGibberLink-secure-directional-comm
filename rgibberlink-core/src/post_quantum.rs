@@ -3,16 +3,16 @@
 //! Implements Kyber-768 KEM and Dilithium3 digital signatures
 //! for quantum-resistant key exchange and authentication.
 
-use std::sync::Arc;
 use zeroize::{Zeroize, ZeroizeOnDrop};
-use crate::crypto::{CryptoError, EphemeralKeySession};
-use std::time::{Instant, Duration};
+use crate::crypto::CryptoError;
+use std::time::Instant;
 
 #[cfg(feature = "post-quantum")]
-use pqcrypto::{
-    kem::kyber768::*,
-    sign::dilithium3::*,
-};
+use pqcrypto_kyber::kyber768;
+#[cfg(feature = "post-quantum")]
+use pqcrypto_dilithium::dilithium3;
+#[cfg(feature = "post-quantum")]
+use pqcrypto_traits::{kem::{PublicKey as _, SecretKey as _, Ciphertext as _, SharedSecret as _}, sign::{PublicKey as _, SecretKey as _, DetachedSignature as _}};
 
 #[cfg(feature = "post-quantum")]
 /// Kyber-768 Key Encapsulation Mechanism
@@ -23,27 +23,28 @@ impl KyberKEM {
     /// Generate a new Kyber-768 keypair
     pub fn generate_keypair() -> Result<KyberKeypair, CryptoError> {
         // Generate keypair using pqcrypto
-        let (pk, sk) = keypair();
+        let (pk, sk) = kyber768::keypair();
         Ok(KyberKeypair {
             public_key: pk,
-            secret_key: sk,
+            secret_key: zeroize::Zeroizing::new(sk.as_bytes().to_vec()),
             created_at: Instant::now(),
         })
     }
 
     /// Encapsulate a shared secret using recipient's public key
     pub fn encapsulate(pk: &KyberPublicKey) -> Result<KyberCiphertextData, CryptoError> {
-        let (ciphertext, shared_secret) = encapsulate(pk);
+        let (shared_secret, ciphertext) = kyber768::encapsulate(pk);
         Ok(KyberCiphertextData {
             ciphertext,
-            shared_secret,
+            shared_secret: KyberSharedSecret(zeroize::Zeroizing::new(shared_secret.as_bytes().to_vec())),
         })
     }
 
     /// Decapsulate a shared secret using recipient's secret key
     pub fn decapsulate(sk: &KyberSecretKey, ct: &KyberCiphertext) -> Result<KyberSharedSecret, CryptoError> {
-        let shared_secret = decapsulate(ct, sk);
-        Ok(shared_secret)
+        let sk = kyber768::SecretKey::from_bytes(sk).map_err(|_| CryptoError::InvalidKeyLength)?;
+        let shared_secret = kyber768::decapsulate(ct, &sk);
+        Ok(KyberSharedSecret(zeroize::Zeroizing::new(shared_secret.as_bytes().to_vec())))
     }
 }
 
@@ -55,23 +56,24 @@ pub struct DilithiumSign;
 impl DilithiumSign {
     /// Generate a new Dilithium3 keypair
     pub fn generate_keypair() -> Result<DilithiumKeypair, CryptoError> {
-        let (pk, sk) = keypair();
+        let (pk, sk) = dilithium3::keypair();
         Ok(DilithiumKeypair {
             public_key: pk,
-            secret_key: sk,
+            secret_key: zeroize::Zeroizing::new(sk.as_bytes().to_vec()),
             created_at: Instant::now(),
         })
     }
 
     /// Sign a message
     pub fn sign(sk: &DilithiumSecretKey, message: &[u8]) -> Result<DilithiumSignature, CryptoError> {
-        let signature = sign(message, sk);
+        let sk = dilithium3::SecretKey::from_bytes(sk).map_err(|_| CryptoError::InvalidKeyLength)?;
+        let signature = dilithium3::detached_sign(message, &sk);
         Ok(signature)
     }
 
     /// Verify a signature
     pub fn verify(pk: &DilithiumPublicKey, message: &[u8], signature: &DilithiumSignature) -> Result<bool, CryptoError> {
-        Ok(verify(signature, message, pk))
+        Ok(dilithium3::verify_detached_signature(signature, message, pk).is_ok())
     }
 }
 
@@ -87,11 +89,13 @@ pub struct KyberKeypair {
 #[cfg(feature = "post-quantum")]
 impl Zeroize for KyberKeypair {
     fn zeroize(&mut self) {
-        // KyberSecretKey implements Zeroize
+        // Serialized long-lived secret bytes are zeroized; upstream key copies are not.
         self.secret_key.zeroize();
     }
 }
 
+#[cfg(feature = "post-quantum")]
+impl Drop for KyberKeypair { fn drop(&mut self) { self.zeroize(); } }
 #[cfg(feature = "post-quantum")]
 impl ZeroizeOnDrop for KyberKeypair {}
 
@@ -106,11 +110,13 @@ pub struct DilithiumKeypair {
 #[cfg(feature = "post-quantum")]
 impl Zeroize for DilithiumKeypair {
     fn zeroize(&mut self) {
-        // DilithiumSecretKey implements Zeroize
+        // Serialized long-lived secret bytes are zeroized; upstream key copies are not.
         self.secret_key.zeroize();
     }
 }
 
+#[cfg(feature = "post-quantum")]
+impl Drop for DilithiumKeypair { fn drop(&mut self) { self.zeroize(); } }
 #[cfg(feature = "post-quantum")]
 impl ZeroizeOnDrop for DilithiumKeypair {}
 
@@ -121,33 +127,26 @@ pub struct KyberCiphertextData {
     pub shared_secret: KyberSharedSecret,
 }
 
+// Type aliases for PQ primitives
 #[cfg(feature = "post-quantum")]
-impl Zeroize for KyberCiphertextData {
-    fn zeroize(&mut self) {
-        self.ciphertext.zeroize();
-        self.shared_secret.zeroize();
-    }
+pub type KyberPublicKey = kyber768::PublicKey;
+#[cfg(feature = "post-quantum")]
+pub type KyberSecretKey = zeroize::Zeroizing<Vec<u8>>;
+#[cfg(feature = "post-quantum")]
+pub type KyberCiphertext = kyber768::Ciphertext;
+#[cfg(feature = "post-quantum")]
+#[derive(Clone)]
+pub struct KyberSharedSecret(zeroize::Zeroizing<Vec<u8>>);
+impl KyberSharedSecret {
+    pub fn as_bytes(&self) -> &[u8] { self.0.as_slice() }
 }
 
 #[cfg(feature = "post-quantum")]
-impl ZeroizeOnDrop for KyberCiphertextData {}
-
-// Type aliases for PQ primitives
+pub type DilithiumPublicKey = dilithium3::PublicKey;
 #[cfg(feature = "post-quantum")]
-pub type KyberPublicKey = pqcrypto::kem::kyber768::PublicKey;
+pub type DilithiumSecretKey = zeroize::Zeroizing<Vec<u8>>;
 #[cfg(feature = "post-quantum")]
-pub type KyberSecretKey = pqcrypto::kem::kyber768::SecretKey;
-#[cfg(feature = "post-quantum")]
-pub type KyberCiphertext = pqcrypto::kem::kyber768::Ciphertext;
-#[cfg(feature = "post-quantum")]
-pub type KyberSharedSecret = pqcrypto::kem::kyber768::SharedSecret;
-
-#[cfg(feature = "post-quantum")]
-pub type DilithiumPublicKey = pqcrypto::sign::dilithium3::PublicKey;
-#[cfg(feature = "post-quantum")]
-pub type DilithiumSecretKey = pqcrypto::sign::dilithium3::SecretKey;
-#[cfg(feature = "post-quantum")]
-pub type DilithiumSignature = pqcrypto::sign::dilithium3::Signature;
+pub type DilithiumSignature = dilithium3::DetachedSignature;
 
 /// Post-Quantum cryptographic engine
 #[cfg(feature = "post-quantum")]
@@ -204,7 +203,7 @@ impl PostQuantumEngine {
 /// Stub implementation when PQ features are not enabled
 pub struct PostQuantumEngine;
 
-#[cfg(not(feature = "post-quantum")]
+#[cfg(not(feature = "post-quantum"))]
 impl PostQuantumEngine {
     pub fn new() -> Result<Self, CryptoError> {
         Err(CryptoError::GenericError("Post-quantum cryptography not enabled".to_string()))
@@ -218,7 +217,6 @@ mod tests {
 
     #[test]
     fn test_kyber_kem() {
-        let alice = KyberKEM::generate_keypair().unwrap();
         let bob = KyberKEM::generate_keypair().unwrap();
 
         // Alice encapsulates for Bob

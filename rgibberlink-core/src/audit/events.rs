@@ -7,7 +7,7 @@ use std::time::{SystemTime, Duration};
 use std::collections::HashMap;
 use crate::mission::{MissionId, MissionPriority};
 use crate::weather::{RiskLevel, ViolationSeverity};
-use super::compliance::{ComplianceEngine, SecurityAlert};
+use super::compliance::ComplianceEngine;
 
 /// Comprehensive audit system for drone mission operations
 pub struct AuditSystem {
@@ -502,6 +502,8 @@ pub struct ReportRequest {
 pub enum AuditError {
     #[error("Invalid audit entry: {0}")]
     InvalidEntry(String),
+    #[error("Compliance validation failed: {0}")]
+    Compliance(#[from] super::compliance::AuditError),
     #[error("Storage limit exceeded")]
     StorageLimitExceeded,
     #[error("Report generation failed: {0}")]

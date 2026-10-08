@@ -19,6 +19,20 @@ use crate::security::{SecurityManager, SecurityError, SecurityConfig, SecurityLe
 use crate::fallback::{FallbackManager, FallbackError, FallbackConfig};
 use crate::performance_monitor::{PerformanceMonitor, PerformanceError, PerformanceMetrics, PerformanceConfig, PerformancePreset};
 
+#[cfg(feature = "post-quantum")]
+use pqcrypto_traits::{kem::{PublicKey as _, Ciphertext as _, SharedSecret as _}, sign::{PublicKey as _, DetachedSignature as _}};
+
+/// Keep timers and background tasks alive across synchronous Python calls.
+fn block_on<F: std::future::Future>(future: F) -> PyResult<F::Output> {
+    static RUNTIME: std::sync::OnceLock<Result<tokio::runtime::Runtime, String>> = std::sync::OnceLock::new();
+    let runtime = RUNTIME.get_or_init(|| tokio::runtime::Runtime::new().map_err(|e| e.to_string()));
+    let runtime = runtime.as_ref().map_err(|e| PyRuntimeError::new_err(e.clone()))?;
+    if tokio::runtime::Handle::try_current().is_ok() {
+        return Err(PyRuntimeError::new_err("Synchronous bindings cannot run inside a Tokio runtime"));
+    }
+    Ok(runtime.block_on(future))
+}
+
 /// Python wrapper for CryptoEngine
 #[pyclass]
 pub struct PyCryptoEngine {
@@ -733,7 +747,7 @@ pub struct PySecurityAlert {
 impl PySecurityAlert {
     #[getter]
     fn severity(&self) -> String {
-        "High".to_string()
+        format!("{:?}", self.inner.severity)
     }
 
     #[getter]
@@ -745,7 +759,7 @@ impl PySecurityAlert {
 /// Python wrapper for RangeDetector
 #[pyclass]
 pub struct PyRangeDetector {
-    inner: RangeDetector,
+    inner: std::sync::Arc<tokio::sync::Mutex<RangeDetector>>,
 }
 
 #[pymethods]
@@ -753,20 +767,20 @@ impl PyRangeDetector {
     #[new]
     fn new() -> Self {
         Self {
-            inner: RangeDetector::new(),
+            inner: std::sync::Arc::new(tokio::sync::Mutex::new(RangeDetector::new())),
         }
     }
 
     fn initialize(&mut self, py: Python) -> PyResult<()> {
         py.detach(|| {
-            self.inner.initialize()
+            block_on(async { self.inner.lock().await.initialize().await })?
                 .map_err(|e| PyRuntimeError::new_err(format!("Range detector initialization error: {}", e)))
         })
     }
 
     fn measure_distance(&self, py: Python) -> PyResult<PyRangeMeasurement> {
         py.detach(|| {
-            let measurement = self.inner.measure_distance()
+            let measurement = block_on(async { self.inner.lock().await.measure_distance().await })?
                 .map_err(|e| PyRuntimeError::new_err(format!("Range measurement error: {}", e)))?;
             Ok(PyRangeMeasurement { inner: measurement })
         })
@@ -774,7 +788,7 @@ impl PyRangeDetector {
 
     fn measure_distance_averaged(&self, py: Python, samples: usize) -> PyResult<PyRangeMeasurement> {
         py.detach(|| {
-            let measurement = self.inner.measure_distance_averaged(samples)
+            let measurement = block_on(async { self.inner.lock().await.measure_distance_averaged_with_samples(samples).await })?
                 .map_err(|e| PyRuntimeError::new_err(format!("Averaged range measurement error: {}", e)))?;
             Ok(PyRangeMeasurement { inner: measurement })
         })
@@ -782,14 +796,14 @@ impl PyRangeDetector {
 
     fn update_environmental_conditions(&self, py: Python, conditions: PyRangeEnvironmentalConditions) -> PyResult<()> {
         py.detach(|| {
-            self.inner.update_environmental_conditions(conditions.inner)
-                .map_err(|e| PyRuntimeError::new_err(format!("Environmental update error: {}", e)))
+            block_on(async { self.inner.lock().await.update_environmental_conditions(conditions.inner).await })?;
+            Ok(())
         })
     }
 
     fn get_current_range_category(&self, py: Python) -> PyResult<String> {
         py.detach(|| {
-            let category = self.inner.get_current_range_category()
+            let category = block_on(async { self.inner.lock().await.get_current_range_category().await })?
                 .map(|cat| format!("{:?}", cat))
                 .unwrap_or("Unknown".to_string());
             Ok(category)
@@ -823,7 +837,8 @@ impl PyRangeMeasurement {
 
     #[getter]
     fn timestamp(&self) -> f64 {
-        self.inner.timestamp.duration_since(std::time::UNIX_EPOCH)
+        std::time::SystemTime::now().checked_sub(self.inner.timestamp.elapsed())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
             .unwrap_or_default().as_secs_f64()
     }
 }
@@ -864,13 +879,13 @@ impl PyLaserEngine {
         let laser_config = LaserConfig {
             laser_type: match laser_type.as_str() {
                 "Visible" => LaserType::Visible,
-                "IR" => LaserType::IR,
+                "IR" => LaserType::Infrared,
                 _ => return Err(PyRuntimeError::new_err("Invalid laser type")),
             },
-            modulation_scheme: match modulation_scheme.as_str() {
+            modulation: match modulation_scheme.as_str() {
                 "OOK" => ModulationScheme::Ook,
                 "PWM" => ModulationScheme::Pwm,
-                "QR" => ModulationScheme::Qr,
+                "QR" => ModulationScheme::QrProjection,
                 _ => return Err(PyRuntimeError::new_err("Invalid modulation scheme")),
             },
             max_power_mw,
@@ -887,21 +902,21 @@ impl PyLaserEngine {
 
     fn initialize(&mut self, py: Python) -> PyResult<()> {
         py.detach(|| {
-            self.inner.initialize()
+            block_on(self.inner.initialize())?
                 .map_err(|e| PyRuntimeError::new_err(format!("Laser initialization error: {}", e)))
         })
     }
 
     fn transmit_data(&mut self, py: Python, data: Vec<u8>) -> PyResult<()> {
         py.detach(|| {
-            self.inner.transmit_data(&data)
+            block_on(self.inner.transmit_data(&data))?
                 .map_err(|e| PyRuntimeError::new_err(format!("Laser transmission error: {}", e)))
         })
     }
 
-    fn enable_adaptive_mode(&mut self, py: Python, range_detector: PyRangeDetector) -> PyResult<()> {
+    fn enable_adaptive_mode(&mut self, py: Python, range_detector: PyRef<'_, PyRangeDetector>) -> PyResult<()> {
+        let detector = range_detector.inner.clone();
         py.detach(|| {
-            let detector = std::sync::Arc::new(tokio::sync::Mutex::new(range_detector.inner));
             self.inner.enable_adaptive_mode(detector);
             Ok(())
         })
@@ -909,7 +924,7 @@ impl PyLaserEngine {
 
     fn get_alignment_status(&self, py: Python) -> PyResult<PyAlignmentStatus> {
         py.detach(|| {
-            let status = self.inner.get_alignment_status();
+            let status = block_on(self.inner.get_alignment_status())?;
             Ok(PyAlignmentStatus { inner: status })
         })
     }
@@ -930,13 +945,13 @@ impl PyAlignmentStatus {
     }
 
     #[getter]
-    fn horizontal_offset_deg(&self) -> f32 {
-        self.inner.horizontal_offset_deg
+    fn beam_position_x(&self) -> f32 {
+        self.inner.beam_position_x
     }
 
     #[getter]
-    fn vertical_offset_deg(&self) -> f32 {
-        self.inner.vertical_offset_deg
+    fn beam_position_y(&self) -> f32 {
+        self.inner.beam_position_y
     }
 }
 
@@ -951,27 +966,27 @@ impl PyUltrasonicBeamEngine {
     #[new]
     fn new() -> PyResult<Self> {
         Ok(Self {
-            inner: UltrasonicBeamEngine::new(BeamConfig::default())?,
+            inner: UltrasonicBeamEngine::new(),
         })
     }
 
     fn initialize(&mut self, py: Python) -> PyResult<()> {
         py.detach(|| {
-            self.inner.initialize()
+            block_on(self.inner.initialize())?
                 .map_err(|e| PyRuntimeError::new_err(format!("Ultrasonic beam initialization error: {}", e)))
         })
     }
 
     fn transmit_sync_pulse(&self, py: Python, pattern: Vec<u8>) -> PyResult<()> {
         py.detach(|| {
-            self.inner.transmit_sync_pulse(&pattern)
+            block_on(self.inner.transmit_sync_pulse(&pattern))?
                 .map_err(|e| PyRuntimeError::new_err(format!("Sync pulse transmission error: {}", e)))
         })
     }
 
     fn detect_presence(&self, py: Python) -> PyResult<bool> {
         py.detach(|| {
-            self.inner.detect_presence()
+            block_on(self.inner.detect_presence())?
                 .map_err(|e| PyRuntimeError::new_err(format!("Presence detection error: {}", e)))
         })
     }
@@ -994,14 +1009,14 @@ impl PyOpticalECC {
 
     fn encode(&mut self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
         py.detach(|| {
-            self.inner.encode(&data)
+            block_on(self.inner.encode(&data))?
                 .map_err(|e| PyRuntimeError::new_err(format!("Optical ECC encoding error: {}", e)))
         })
     }
 
     fn decode(&mut self, py: Python, data: Vec<u8>) -> PyResult<Vec<u8>> {
         py.detach(|| {
-            self.inner.decode(&data)
+            block_on(self.inner.decode(&data))?
                 .map_err(|e| PyRuntimeError::new_err(format!("Optical ECC decoding error: {}", e)))
         })
     }
@@ -1018,13 +1033,13 @@ impl PyChannelValidator {
     #[new]
     fn new() -> Self {
         Self {
-            inner: ChannelValidator::new(crate::channel_validator::ValidationConfig::default()),
+            inner: ChannelValidator::new(),
         }
     }
 
     fn receive_channel_data(&self, py: Python, data: PyChannelData) -> PyResult<()> {
         py.detach(|| {
-            self.inner.receive_channel_data(data.inner)
+            block_on(self.inner.receive_channel_data(data.inner))?
                 .map_err(|e| PyRuntimeError::new_err(format!("Channel validation error: {}", e)))
         })
     }
@@ -1040,20 +1055,27 @@ pub struct PyChannelData {
 #[pymethods]
 impl PyChannelData {
     #[new]
-    fn new(channel_type: String, data: Vec<u8>, timestamp: f64, quality: f32) -> PyResult<Self> {
+    fn new(channel_type: String, data: Vec<u8>, timestamp: f64, sequence_id: u64) -> PyResult<Self> {
         let channel_type_enum = match channel_type.as_str() {
             "Laser" => ChannelType::Laser,
             "Ultrasound" => ChannelType::Ultrasound,
             _ => return Err(PyRuntimeError::new_err("Invalid channel type")),
         };
 
+        let epoch_duration = std::time::Duration::try_from_secs_f64(timestamp)
+            .map_err(|_| PyRuntimeError::new_err("Invalid timestamp"))?;
+        let wall_time = std::time::UNIX_EPOCH.checked_add(epoch_duration)
+            .ok_or_else(|| PyRuntimeError::new_err("Timestamp out of range"))?;
+        let age = std::time::SystemTime::now().duration_since(wall_time)
+            .map_err(|_| PyRuntimeError::new_err("Future timestamps are not allowed"))?;
+        let instant = tokio::time::Instant::now().checked_sub(age)
+            .ok_or_else(|| PyRuntimeError::new_err("Timestamp out of range"))?;
         Ok(Self {
             inner: ChannelData {
                 channel_type: channel_type_enum,
                 data,
-                timestamp: std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs_f64(timestamp),
-                quality_score: quality,
-                ..Default::default()
+                timestamp: instant,
+                sequence_id,
             },
         })
     }
@@ -1070,10 +1092,9 @@ impl PySecurityManager {
     #[new]
     fn new(security_level: String) -> PyResult<Self> {
         let level = match security_level.as_str() {
-            "Low" => SecurityLevel::Low,
-            "Medium" => SecurityLevel::Medium,
-            "High" => SecurityLevel::High,
-            "Critical" => SecurityLevel::Critical,
+            "Minimum" => SecurityLevel::Minimum,
+            "SensitiveEscalation" => SecurityLevel::SensitiveEscalation,
+            "Locked" => SecurityLevel::Locked,
             _ => return Err(PyRuntimeError::new_err("Invalid security level")),
         };
 
@@ -1089,7 +1110,7 @@ impl PySecurityManager {
 
     fn validate_pin(&self, py: Python, pin: String) -> PyResult<()> {
         py.detach(|| {
-            self.inner.validate_pin(&pin)
+            block_on(self.inner.validate_pin(&pin))?
                 .map_err(|e| PyRuntimeError::new_err(format!("PIN validation error: {}", e)))
         })
     }
@@ -1097,20 +1118,23 @@ impl PySecurityManager {
     fn check_permission(&self, py: Python, permission: String, scope: String) -> PyResult<()> {
         py.detach(|| {
             let perm_type = match permission.as_str() {
-                "Read" => crate::security::PermissionType::Read,
-                "Write" => crate::security::PermissionType::Write,
-                "Execute" => crate::security::PermissionType::Execute,
+                "Discussion" => crate::security::PermissionType::Discussion,
+                "AccessAuth" => crate::security::PermissionType::AccessAuth,
+                "Command" => crate::security::PermissionType::Command,
+                "Pairing" => crate::security::PermissionType::Pairing,
+                "FileTransfer" => crate::security::PermissionType::FileTransfer,
                 _ => return Err(PyRuntimeError::new_err("Invalid permission type")),
             };
 
             let perm_scope = match scope.as_str() {
-                "Local" => crate::security::PermissionScope::Local,
-                "Network" => crate::security::PermissionScope::Network,
-                "Global" => crate::security::PermissionScope::Global,
+                "Single" => crate::security::PermissionScope::Single,
+                "Group" => crate::security::PermissionScope::Group,
+                "All" => crate::security::PermissionScope::All,
+                "Session" => crate::security::PermissionScope::Session,
                 _ => return Err(PyRuntimeError::new_err("Invalid permission scope")),
             };
 
-            self.inner.check_permission(perm_type, perm_scope)
+            block_on(self.inner.check_permission(perm_type, perm_scope))?
                 .map_err(|e| PyRuntimeError::new_err(format!("Permission check error: {}", e)))
         })
     }
@@ -1133,7 +1157,7 @@ impl PyPerformanceMonitor {
 
     fn run_benchmark_suite(&self, py: Python, duration_secs: u64) -> PyResult<Vec<PyBenchmarkResult>> {
         py.detach(|| {
-            let results = self.inner.run_benchmark_suite(duration_secs)
+            let results = block_on(self.inner.run_benchmark_suite(duration_secs))?
                 .map_err(|e| PyRuntimeError::new_err(format!("Benchmark error: {}", e)))?;
             Ok(results.into_iter().map(|r| PyBenchmarkResult { inner: r }).collect())
         })
@@ -1141,7 +1165,7 @@ impl PyPerformanceMonitor {
 
     fn get_current_metrics(&self, py: Python) -> PyResult<Option<PyPerformanceMetrics>> {
         py.detach(|| {
-            let metrics = self.inner.get_current_metrics();
+            let metrics = block_on(self.inner.get_current_metrics())?;
             Ok(metrics.map(|m| PyPerformanceMetrics { inner: m }))
         })
     }
@@ -1158,17 +1182,17 @@ pub struct PyBenchmarkResult {
 impl PyBenchmarkResult {
     #[getter]
     fn benchmark_type(&self) -> String {
-        format!("{:?}", self.inner.benchmark_type)
+        format!("{:?}", self.inner.config.modulation_scheme)
     }
 
     #[getter]
     fn throughput_mbps(&self) -> f64 {
-        self.inner.throughput_mbps
+        self.inner.metrics.data_throughput_bps / 1_000_000.0
     }
 
     #[getter]
     fn latency_ms(&self) -> f64 {
-        self.inner.latency_ms
+        self.inner.metrics.handshake_latency_ms
     }
 }
 
@@ -1183,18 +1207,14 @@ pub struct PyPerformanceMetrics {
 impl PyPerformanceMetrics {
     #[getter]
     fn throughput_mbps(&self) -> f64 {
-        self.inner.throughput_mbps
+        self.inner.data_throughput_bps / 1_000_000.0
     }
 
     #[getter]
     fn latency_ms(&self) -> f64 {
-        self.inner.latency_ms
+        self.inner.handshake_latency_ms
     }
 
-    #[getter]
-    fn cpu_usage_percent(&self) -> f32 {
-        self.inner.cpu_usage_percent
-    }
 }
 
 /// Python wrapper for PostQuantumEngine
@@ -1224,9 +1244,7 @@ impl PyPostQuantumEngine {
 
     fn encapsulate_secret(&self, py: Python, peer_public_key: Vec<u8>) -> PyResult<PyKyberCiphertextData> {
         py.detach(|| {
-            let pk_bytes: [u8; 1184] = peer_public_key.try_into()
-                .map_err(|_| PyRuntimeError::new_err("Invalid Kyber public key length"))?;
-            let pk = crate::post_quantum::KyberPublicKey::from_bytes(&pk_bytes)
+            let pk = crate::post_quantum::KyberPublicKey::from_bytes(&peer_public_key)
                 .map_err(|_| PyRuntimeError::new_err("Invalid Kyber public key"))?;
 
             let ciphertext_data = self.inner.encapsulate_secret(&pk)
@@ -1254,14 +1272,10 @@ impl PyPostQuantumEngine {
 
     fn verify_signature(&self, py: Python, data: Vec<u8>, signature: Vec<u8>, public_key: Vec<u8>) -> PyResult<bool> {
         py.detach(|| {
-            let sig_bytes: [u8; 2420] = signature.try_into()
-                .map_err(|_| PyRuntimeError::new_err("Invalid Dilithium signature length"))?;
-            let sig = crate::post_quantum::DilithiumSignature::from_bytes(&sig_bytes)
+            let sig = crate::post_quantum::DilithiumSignature::from_bytes(&signature)
                 .map_err(|_| PyRuntimeError::new_err("Invalid Dilithium signature"))?;
 
-            let pk_bytes: [u8; 1952] = public_key.try_into()
-                .map_err(|_| PyRuntimeError::new_err("Invalid Dilithium public key length"))?;
-            let pk = crate::post_quantum::DilithiumPublicKey::from_bytes(&pk_bytes)
+            let pk = crate::post_quantum::DilithiumPublicKey::from_bytes(&public_key)
                 .map_err(|_| PyRuntimeError::new_err("Invalid Dilithium public key"))?;
 
             self.inner.verify_signature(&data, &sig, &pk)

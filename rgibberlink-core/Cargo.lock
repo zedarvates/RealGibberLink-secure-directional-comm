@@ -1297,17 +1297,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pqcrypto"
-version = "0.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e10caefecccc56b78d30a6b46effa2360048104d668fb7cea944c0761f9c1f11"
-dependencies = [
- "pqcrypto-dilithium",
- "pqcrypto-kyber",
- "pqcrypto-traits",
-]
-
-[[package]]
 name = "pqcrypto-dilithium"
 version = "0.4.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1586,7 +1575,9 @@ dependencies = [
  "hkdf",
  "hmac",
  "js-sys",
- "pqcrypto",
+ "pqcrypto-dilithium",
+ "pqcrypto-kyber",
+ "pqcrypto-traits",
  "pyo3",
  "qrcode",
  "rand",

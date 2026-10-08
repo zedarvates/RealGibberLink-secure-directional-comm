@@ -313,10 +313,13 @@
 
 extern crate serde;
 
+#[cfg(feature = "post-quantum")]
+pub mod post_quantum;
 pub mod crypto;
 pub mod audio;
 pub mod ultrasonic_beam;
 pub mod visual;
+#[path = "laser.rs"]
 pub mod laser;
 pub mod range_detector;
 pub mod optical_ecc;

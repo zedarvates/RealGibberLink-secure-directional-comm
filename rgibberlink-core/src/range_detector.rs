@@ -315,14 +315,21 @@ impl RangeDetector {
 
     /// Perform multiple measurements and return averaged result
     pub async fn measure_distance_averaged(&self) -> Result<RangeMeasurement, RangeDetectorError> {
+        self.measure_distance_averaged_with_samples(self.config.averaging_samples).await
+    }
+
+    pub async fn measure_distance_averaged_with_samples(&self, samples: usize) -> Result<RangeMeasurement, RangeDetectorError> {
+        if samples == 0 || samples > 1000 {
+            return Err(RangeDetectorError::InvalidMeasurement("Sample count must be between 1 and 1000".into()));
+        }
         let mut measurements = Vec::new();
 
-        for _ in 0..self.config.averaging_samples {
+        for _ in 0..samples {
             match self.measure_distance().await {
                 Ok(measurement) => measurements.push(measurement),
                 Err(e) => {
                     // Continue with other measurements, but if too many fail, return error
-                    if measurements.len() < self.config.averaging_samples / 2 {
+                    if measurements.len() < samples / 2 {
                         return Err(e);
                     }
                 }

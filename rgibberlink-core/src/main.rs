@@ -1,9 +1,9 @@
 #[cfg(feature = "python")]
 use clap::{Parser, Subcommand};
 #[cfg(feature = "python")]
-use crate::crypto::CryptoEngine;
+use gibberlink_core::crypto::CryptoEngine;
 #[cfg(feature = "python")]
-use crate::visual::{VisualEngine, VisualPayload};
+use gibberlink_core::visual::{VisualEngine, VisualPayload};
 #[cfg(feature = "python")]
 use std::fs;
 

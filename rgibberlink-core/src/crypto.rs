@@ -316,13 +316,13 @@ impl CryptoEngine {
     /// Get Kyber public key for post-quantum key exchange
     #[cfg(feature = "post-quantum")]
     pub fn kyber_public_key(&self) -> Option<&crate::post_quantum::KyberPublicKey> {
-        self.pq_engine.as_ref()?.kyber_public_key()
+        Some(self.pq_engine.as_ref()?.kyber_public_key())
     }
 
     /// Get Dilithium public key for post-quantum signatures
     #[cfg(feature = "post-quantum")]
     pub fn dilithium_public_key(&self) -> Option<&crate::post_quantum::DilithiumPublicKey> {
-        self.pq_engine.as_ref()?.dilithium_public_key()
+        Some(self.pq_engine.as_ref()?.dilithium_public_key())
     }
 
     /// Perform post-quantum key encapsulation
@@ -360,20 +360,11 @@ impl CryptoEngine {
     /// Hybrid key exchange: Combine classical ECDH with post-quantum Kyber
     #[cfg(feature = "post-quantum")]
     pub fn hybrid_key_exchange(&mut self, peer_ecdh_key: &[u8], peer_kyber_key: &crate::post_quantum::KyberPublicKey) -> Result<[u8; 32], CryptoError> {
-        // Perform classical ECDH
-        let classical_session = self.derive_ephemeral_shared_secret(peer_ecdh_key)?;
-
-        // Perform post-quantum key exchange
-        let pq_ciphertext = self.pq_encapsulate_secret(peer_kyber_key)?;
-        let pq_shared_secret = self.pq_decapsulate_secret(&pq_ciphertext.ciphertext)?;
-
-        // Combine secrets using HKDF
-        let mut combined_secret = [0u8; 64];
-        combined_secret[..32].copy_from_slice(classical_session.key());
-        combined_secret[32..].copy_from_slice(pq_shared_secret.as_bytes());
-
-        // Derive final key
-        self.hkdf_derive_key(&combined_secret, b"hybrid-key-exchange", 32)
+        // This API cannot return a ciphertext to the peer. Decapsulating a
+        // peer ciphertext with our own key produced a mismatched session key.
+        // Fail closed until a two-party ciphertext exchange API is designed.
+        let _ = (peer_ecdh_key, peer_kyber_key);
+        Err(CryptoError::GenericError("Hybrid exchange requires a two-party ciphertext exchange; use explicit KEM encapsulation/decapsulation".into()))
     }
 
     /// Hybrid signature: Sign with both Ed25519 and Dilithium
@@ -389,7 +380,7 @@ impl CryptoEngine {
     #[cfg(feature = "post-quantum")]
     pub fn hybrid_verify_signature(&self, data: &[u8], classical_sig: &[u8], pq_sig: &crate::post_quantum::DilithiumSignature, pq_public_key: &crate::post_quantum::DilithiumPublicKey) -> Result<bool, CryptoError> {
         // Verify classical signature
-        let classical_valid = self.verify_log_signature(self.ed25519_public_key().as_bytes(), data, classical_sig).is_ok();
+        let classical_valid = Self::verify_log_signature(self.ed25519_public_key(), data, classical_sig).is_ok();
 
         // Verify post-quantum signature
         let pq_valid = self.pq_verify_signature(data, pq_sig, pq_public_key)?;

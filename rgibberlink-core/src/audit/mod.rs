@@ -26,6 +26,7 @@ pub use events::{
     ActorFilter,
     ReportRequest,
     AuditError,
+    OperationContext, ResourceConsumption, OperationResult, PerformanceMetrics, AuditContext,
 };
 
 pub use compliance::{
